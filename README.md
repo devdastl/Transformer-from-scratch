@@ -1,0 +1,2 @@
+# Repository to learn Transformer architecture with Andrej
+Here is the link of the notebook where experiements are done [colab notebook](https://colab.research.google.com/drive/1kA_Md8ITx8F0KdRspmO7ltvaMAt8o6Q9#scrollTo=GSWiCxlJj72V)
