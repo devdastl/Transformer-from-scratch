@@ -209,6 +209,10 @@ def main():
     if os.path.exists("mutlihead_transformer_model.pth"):
         model_instance.load_state_dict(torch.load("mutlihead_transformer_model.pth"))
 
+    #print total number of trainable parameters in model
+    total_parameters = sum(p.numel() for p in model_instance.parameters() if p.requires_grad)
+    print(f"total trainable parameters are: {total_parameters}")
+
     #initialize optimizer to perform gradient decent.
     optimizer = torch.optim.AdamW(model_instance.parameters(), lr=lr)
 
