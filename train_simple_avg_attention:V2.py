@@ -1,3 +1,11 @@
+#This is version 2 of the code with simple average attention. Following are new changes:
+##usecase change:
+#We are still using bigram model so there is no change in performance due to adding postion embedding as we are plucking out only the last character
+## Architecture change:
+#1. Added new linear layer after calcuting token embeddings.
+#2. Added positional embedding matrix which will add value in each sequence of output embedding vectors from embedding matrix
+
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,14 +41,21 @@ class GptDataloader():
         return "".join([self.int_to_char[i] for i in int_list])
 
 class SimpleBigramModel(nn.Module):
-    def __init__(self, embed_size):
+    def __init__(self, embed_size, vocab_size, block_size):
         super().__init__()
         self.embedding_size = embed_size
-        self.embedding_matrix = torch.nn.Embedding(self.embedding_size, self.embedding_size)
-        
+        self.vocab_size = vocab_size
+        self.block_size = block_size
+        self.embedding_matrix = torch.nn.Embedding(self.embedding_size, self.embedding_size) #--> 32x8xembedding_size
+        self.poisiton_embedding_matrix = torch.nn.Embedding(self.block_size, self.embedding_size)
+        self.linear_layer = torch.nn.Linear(self.embedding_size, self.vocab_size) #--> 32x8xvocab_size
 
     def forward(self, input, output=None):
-        logits = self.embedding_matrix(input)  # 32x8 --> 32x8x65
+        Batch_size, sequence_size = input.shape
+        token_embeddings = self.embedding_matrix(input)  # 32x8 --> 32x8x65
+        position_embedding = self.poisiton_embedding_matrix(torch.arange(sequence_size)) # 8x65
+        token_embeddings = token_embeddings + position_embedding #32x8x65 + 8x65
+        logits = self.linear_layer(token_embeddings) #32x8x65 --> 32x8x65
 
         if output != None:
             B, T, C = logits.shape
@@ -49,11 +64,11 @@ class SimpleBigramModel(nn.Module):
         else:
             return logits
 
-    def infer(self, seed_int, size): #seed_int 1x1
+    def infer(self, seed_int, size, block_size): #seed_int 1x1
         with torch.no_grad():
             for i in range(size):
-                logits = self.forward(seed_int)  #first:iter 1x1x65, #second:iter 1x2x65, ....#size:iter 1xsizex65
-                print(logits.shape)
+                ind_cropped = seed_int[:,-block_size:]
+                logits = self.forward(ind_cropped)  #first:iter 1x1x65, #second:iter 1x2x65, ....#size:iter 1xsizex65
                 proab_distribution = F.softmax(logits[:,-1,:], dim=-1) #calculating distribution across last char "-1" and last dim
                 indx = torch.multinomial(proab_distribution, num_samples=1) 
                 seed_int = torch.cat((seed_int, indx), dim=1)  #1x2
@@ -88,7 +103,7 @@ def estimate_loss(dataloader_instance, model_instance):
 def main():
 
     #important hyperparameter:
-    epoch = 100000
+    epoch = 10000
     device = 'cpu'
     batch_size = 32
     block_size = 8
@@ -99,9 +114,10 @@ def main():
     dataloader_instance = GptDataloader('dataset.txt',train_test_split=train_split)
 
     #initialize model instance
-    model_instance = SimpleBigramModel(len(dataloader_instance.unique_char)).to(device)
-    if os.path.exists("bigram_model.pth"):
-        model_instance.load_state_dict(torch.load("bigram_model.pth"))
+    vocab_size = len(dataloader_instance.unique_char)
+    model_instance = SimpleBigramModel(vocab_size, vocab_size, block_size).to(device)
+    if os.path.exists("bigram_model_v2.pth"):
+        model_instance.load_state_dict(torch.load("bigram_model_v2.pth"))
 
     #initialize optimizer to perform gradient decent.
     optimizer = torch.optim.AdamW(model_instance.parameters(), lr=lr)
@@ -119,8 +135,13 @@ def main():
     input, output = dataloader_instance.get_batch(batch_size, block_size, 'train')
     loss, _ = model_instance(input, output)
     print(f"loss after {epoch} is -> {loss.item()}")
-    torch.save(model_instance.state_dict(), "bigram_model.pth")
-    estimate_loss(dataloader_instance, model_instance)
+    torch.save(model_instance.state_dict(), "bigram_model_v2.pth")
+
+    #run inference to see the results:
+    seed_input = torch.tensor([[0]])
+    output = model_instance.infer(seed_input, size=150, block_size=block_size)
+    print(dataloader_instance.decode(output.tolist()))
+    #estimate_loss(dataloader_instance, model_instance)
 
 
 if __name__ == '__main__':

@@ -10,3 +10,4 @@ wheels/
 .venv
 bigram_model.pth
 dataset.txt
+*.pth
